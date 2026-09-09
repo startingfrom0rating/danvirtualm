@@ -1,0 +1,21 @@
+# Logs
+logs/
+*.log
+
+# User session, profiles & downloads
+profile/
+downloads/
+
+# Runtime files & tokens
+CURRENT_URL.txt
+VM_LINK.txt
+.env
+
+# Node & Python caches
+node_modules/
+__pycache__/
+*.pyc
+
+# OS / Editor
+.DS_Store
+.vscode/

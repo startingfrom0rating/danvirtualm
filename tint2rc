@@ -1,0 +1,80 @@
+# Tint2 config for Virtual Desktop
+# --- Panel ---
+panel_position = bottom center horizontal
+panel_size = 100% 38
+panel_margin = 0 0
+panel_padding = 4 2 4
+panel_background_id = 1
+wm_menu = 1
+panel_dock = 0
+panel_pivot_struts = 0
+panel_layer = normal
+strut_policy = follow_size
+
+# --- Taskbar ---
+taskbar_mode = single_desktop
+taskbar_hide_if_empty = 0
+taskbar_name = 0
+taskbar_name_padding = 0 0
+taskbar_name_background_id = 0
+taskbar_name_active_background_id = 0
+taskbar_distribute_size = 1
+taskbar_padding = 2 2 2
+taskbar_background_id = 0
+taskbar_active_background_id = 0
+
+# --- Tasks ---
+task_icon = 1
+task_text = 1
+task_centered = 1
+task_maximum_size = 200 32
+task_padding = 4 2 4
+task_font = Sans 9
+task_tooltip = 1
+task_font_color = #ffffff 100
+task_active_font_color = #ffffff 100
+task_background_id = 2
+task_active_background_id = 3
+
+# --- Launchers ---
+launcher_padding = 4 2 4
+launcher_background_id = 0
+launcher_icon_background_id = 0
+launcher_icon_size = 24
+launcher_icon_as_theme = 1
+launcher_item_app = /usr/share/applications/google-chrome.desktop
+launcher_item_app = /usr/share/applications/xfce4-terminal.desktop
+launcher_item_app = /usr/share/applications/thunar.desktop
+launcher_item_app = /usr/share/applications/mousepad.desktop
+
+# --- Clock ---
+time1_format = %H:%M
+time1_font = Sans Bold 9
+time1_font_color = #ffffff 100
+time1_padding = 6 2
+time1_background_id = 0
+
+# --- Backgrounds ---
+# 1: Panel Background
+rounded = 0
+border_width = 1
+border_sides = T
+border_color = #333333 100
+background_color = #1a1a1a 100
+
+# 2: Default Task
+rounded = 3
+border_width = 1
+border_sides = TBLR
+border_color = #444444 80
+background_color = #2a2a2a 100
+
+# 3: Active Task
+rounded = 3
+border_width = 1
+border_sides = TBLR
+border_color = #4daafc 100
+background_color = #334455 100
+
+# Panel Items
+panel_items = LTS
