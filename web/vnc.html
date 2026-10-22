@@ -183,6 +183,11 @@
                     </li>
                     <li><hr></li>
                     <li>
+                        <label for="virtual_tab_title_input">Tab Name:</label>
+                        <input id="virtual_tab_title_input" type="text" placeholder="e.g. type_assignment.py" style="width: 100%; box-sizing: border-box; padding: 4px 6px; margin-top: 4px; background: #222; color: #fff; border: 1px solid #555; border-radius: 3px;" oninput="setCustomTabTitle(this.value)">
+                    </li>
+                    <li><hr></li>
+                    <li>
                         <label for="virtual_quality_preset">Quality Preset:</label>
                         <select id="virtual_quality_preset" onchange="applyQualityPreset(this.value)">
                             <option value="balanced" selected>Balanced (Quality 6, Comp 2)</option>
@@ -397,6 +402,30 @@
             compInput.dispatchEvent(new Event('input', { bubbles: true }));
             compInput.dispatchEvent(new Event('change', { bubbles: true }));
         }
+
+        function setCustomTabTitle(name) {
+            if (name && name.trim()) {
+                localStorage.setItem('custom_tab_title', name.trim());
+                document.title = name.trim();
+            } else {
+                localStorage.removeItem('custom_tab_title');
+                document.title = "Virtual Workstation";
+            }
+        }
+
+        // Apply saved tab title on load
+        (function() {
+            const saved = localStorage.getItem('custom_tab_title');
+            if (saved) {
+                document.title = saved;
+            }
+            window.addEventListener('DOMContentLoaded', () => {
+                const inp = document.getElementById('virtual_tab_title_input');
+                if (inp && saved) {
+                    inp.value = saved;
+                }
+            });
+        })();
     </script>
  </body>
 </html>

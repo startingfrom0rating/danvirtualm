@@ -1658,8 +1658,10 @@ const UI = {
 
     updateDesktopName(e) {
         UI.desktopName = e.detail.name;
-        // Display the desktop name in the document title unless custom title is set
-        if (WebUtil.getConfigVar('title', null) || WebUtil.getConfigVar('name', null)) {
+        const saved = (typeof localStorage !== 'undefined') ? localStorage.getItem('custom_tab_title') : null;
+        if (saved) {
+            document.title = saved;
+        } else if (WebUtil.getConfigVar('title', null) || WebUtil.getConfigVar('name', null)) {
             document.title = PAGE_TITLE;
         } else if (e.detail.name && e.detail.name !== 'x11') {
             document.title = e.detail.name + " - " + PAGE_TITLE;
