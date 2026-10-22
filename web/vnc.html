@@ -183,6 +183,15 @@
                     </li>
                     <li><hr></li>
                     <li>
+                        <label for="virtual_quality_preset">Quality Preset:</label>
+                        <select id="virtual_quality_preset" onchange="applyQualityPreset(this.value)">
+                            <option value="balanced" selected>Balanced (Quality 6, Comp 2)</option>
+                            <option value="low_bandwidth">Low Bandwidth (Quality 2, Comp 6)</option>
+                            <option value="high_quality">High Quality (Quality 9, Comp 0)</option>
+                        </select>
+                    </li>
+                    <li><hr></li>
+                    <li>
                         <div class="noVNC_expander">Advanced</div>
                         <div><ul>
                             <li>
@@ -365,6 +374,28 @@
         function openAudioWidget() {
             document.getElementById('virtual_audio_bar').style.display = 'flex';
             document.getElementById('virtual_audio_open_btn').style.display = 'none';
+        }
+
+        function applyQualityPreset(preset) {
+            const qualityInput = document.getElementById('noVNC_setting_quality');
+            const compInput = document.getElementById('noVNC_setting_compression');
+            if (!qualityInput || !compInput) return;
+
+            if (preset === 'low_bandwidth') {
+                qualityInput.value = 2;
+                compInput.value = 6;
+            } else if (preset === 'high_quality') {
+                qualityInput.value = 9;
+                compInput.value = 0;
+            } else { // balanced
+                qualityInput.value = 6;
+                compInput.value = 2;
+            }
+
+            qualityInput.dispatchEvent(new Event('input', { bubbles: true }));
+            qualityInput.dispatchEvent(new Event('change', { bubbles: true }));
+            compInput.dispatchEvent(new Event('input', { bubbles: true }));
+            compInput.dispatchEvent(new Event('change', { bubbles: true }));
         }
     </script>
  </body>

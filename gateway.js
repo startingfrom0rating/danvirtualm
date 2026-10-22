@@ -139,7 +139,7 @@ function renderLoginPage(errorMessage = '') {
     <div class="icon">🔒</div>
     <h1>Virtual Workstation</h1>
     <p>This workstation is protected. Enter your password to unlock the desktop session.</p>
-    ${errorMessage ? \`<div class="error">\${errorMessage}</div>\` : ''}
+    ${errorMessage ? `<div class="error">${errorMessage}</div>` : ''}
     <form method="POST" action="/login">
       <input type="password" name="password" placeholder="Enter password" autofocus required />
       <button type="submit">Unlock Workstation</button>
@@ -326,10 +326,22 @@ function createServerInstance() {
     vncSocket.on('data', (chunk) => {
       if (ws.readyState === ws.OPEN) {
         ws.send(chunk, { binary: true });
+        // Backpressure flow control: prevent bufferbloat if client connection is slow (tuned to 96KB / ~150ms at 5Mbps)
+        if (ws.bufferedAmount > 96 * 1024 && !vncSocket.isPaused()) {
+          vncSocket.pause();
+        }
       }
     });
 
+    // Check buffer drainage to resume VNC streaming promptly
+    const drainInterval = setInterval(() => {
+      if (ws.readyState === ws.OPEN && vncSocket.isPaused() && ws.bufferedAmount < 32 * 1024) {
+        vncSocket.resume();
+      }
+    }, 10);
+
     const cleanup = () => {
+      clearInterval(drainInterval);
       try { vncSocket.destroy(); } catch (_) {}
       try { ws.close(); } catch (_) {}
     };

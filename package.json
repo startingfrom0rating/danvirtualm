@@ -1,12 +1,14 @@
 {
   "name": "danvirtualm",
-  "version": "1.0.0",
-  "description": "Ultra Low-Latency Cloud-Streamed Virtual Machine & Browser",
+  "version": "1.1.0",
+  "description": "Ultra Low-Latency Cloud-Streamed Virtual Machine & Browser Workstation",
   "main": "gateway.js",
   "scripts": {
+    "setup": "./setup.sh",
     "start": "./start.sh",
     "status": "./status.sh",
-    "stop": "./stop.sh"
+    "stop": "./stop.sh",
+    "optimize": "./optimize_vm.sh"
   },
   "dependencies": {
     "ws": "^8.18.0"

@@ -2,11 +2,11 @@
 logs/
 *.log
 
-# User session, profiles & downloads
+# User session, browser profiles & downloads
 profile/
 downloads/
 
-# Runtime files & tokens
+# Runtime tokens & generated URLs
 CURRENT_URL.txt
 VM_LINK.txt
 .env
@@ -16,6 +16,12 @@ node_modules/
 __pycache__/
 *.pyc
 
-# OS / Editor
+# Temporary files & packages
+*.deb
+*.sock
+*.lock
+
+# OS & Editors
 .DS_Store
 .vscode/
+.idea/

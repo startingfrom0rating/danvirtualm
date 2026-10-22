@@ -23,4 +23,7 @@ pgrep -fa "cloudflared" >/dev/null && echo "Running [OK]" || echo "Stopped [OFF]
 
 echo -n "Google Chrome: "
 pgrep -fa "chrome" >/dev/null && echo "Running [OK]" || echo "Stopped [OFF]"
+
+echo -n "Memory Watchdog: "
+pgrep -fa "optimize_vm.sh --watch" >/dev/null && echo "Running [OK]" || echo "Stopped [OFF]"
 echo "==================================="
