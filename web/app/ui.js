@@ -17,7 +17,7 @@ import Keyboard from "../core/input/keyboard.js";
 import RFB from "../core/rfb.js";
 import * as WebUtil from "./webutil.js";
 
-const PAGE_TITLE = "noVNC";
+const PAGE_TITLE = WebUtil.getConfigVar('title', WebUtil.getConfigVar('name', 'Virtual Workstation'));
 
 const UI = {
 
@@ -1658,8 +1658,14 @@ const UI = {
 
     updateDesktopName(e) {
         UI.desktopName = e.detail.name;
-        // Display the desktop name in the document title
-        document.title = e.detail.name + " - " + PAGE_TITLE;
+        // Display the desktop name in the document title unless custom title is set
+        if (WebUtil.getConfigVar('title', null) || WebUtil.getConfigVar('name', null)) {
+            document.title = PAGE_TITLE;
+        } else if (e.detail.name && e.detail.name !== 'x11') {
+            document.title = e.detail.name + " - " + PAGE_TITLE;
+        } else {
+            document.title = PAGE_TITLE;
+        }
     },
 
     bell(e) {

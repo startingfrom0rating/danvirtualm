@@ -2,7 +2,13 @@
 <html>
 <head>
   <meta charset="utf-8" />
-  <meta http-equiv="refresh" content="0; url=vnc.html?autoconnect=true&resize=scale&path=websockify&quality=6&compression=2&show_dot=true" />
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const title = params.get('title') || params.get('name');
+    let target = "vnc.html?autoconnect=true&resize=scale&path=websockify&quality=6&compression=2&show_dot=true";
+    if (title) target += "&title=" + encodeURIComponent(title);
+    window.location.replace(target);
+  </script>
   <title>Virtual Browser</title>
 </head>
 <body style="background:#1e1e1e;color:#fff;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;">
