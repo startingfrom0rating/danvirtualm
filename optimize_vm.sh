@@ -3,14 +3,20 @@
 # Automatically tunes Linux kernel, manages swap, cleans bloat, and prevents OOM crashes
 #
 # Usage:
-#   ./optimize_vm.sh          — Full optimization (default on boot)
-#   ./optimize_vm.sh --watch  — Memory pressure watchdog (runs in background)
-#   ./optimize_vm.sh --quick  — Fast cleanup (no swap, no disk scan)
+#   ./optimize_vm.sh             — Full optimization (maintenance mode)
+#   ./optimize_vm.sh --prelaunch — Fast pre-launch optimization (<1s, skips slow cache scrubbing)
+#   ./optimize_vm.sh --fast      — Synonym for --prelaunch
+#   ./optimize_vm.sh --quick     — Fast cleanup (no swap creation, no disk scan)
+#   ./optimize_vm.sh --watch     — Memory pressure watchdog (runs in background)
 
 set -uo pipefail
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROFILE_DIR="$DIR/profile"
+if [ -d "$DIR/virtual-browser/profile" ]; then
+    PROFILE_DIR="$DIR/virtual-browser/profile"
+else
+    PROFILE_DIR="$DIR/profile"
+fi
 CACHE_DIR="${HOME:-/root}/.cache"
 
 # ─────────────────────────────────────────────────────────────
@@ -78,31 +84,56 @@ if [[ "${1:-}" == "--watch" ]]; then
 fi
 
 # ─────────────────────────────────────────────────────────────
-# Quick cleanup mode (skip swap + disk scan)
+# Mode evaluation
 # ─────────────────────────────────────────────────────────────
 QUICK=false
-if [[ "${1:-}" == "--quick" ]]; then
-    QUICK=true
-fi
+PRELAUNCH=false
+for arg in "$@"; do
+    case "$arg" in
+        --quick)
+            QUICK=true
+            ;;
+        --fast|--prelaunch)
+            PRELAUNCH=true
+            QUICK=true
+            ;;
+    esac
+done
 
 echo "🔧 VM Memory Optimization"
 echo "========================="
 
-# 1. Create swap if not present
-if ! swapon --show 2>/dev/null | grep -q swap; then
-    echo "📦 Checking swap space..."
-    # /tmp is typically ext4/ext3; fall back to dd if fallocate fails on overlayfs
+# 1. Swap space handling
+echo "📦 Checking swap space..."
+if swapon --show 2>/dev/null | grep -q swap; then
+    echo "   ✅ Swap already active"
+elif [[ "$PRELAUNCH" == "true" ]]; then
+    # In fast prelaunch mode, avoid blocking startup with heavy 2GB disk allocation / dd
+    if [ -f /tmp/swapfile ] && [ ! -f /tmp/.no_swap_support ]; then
+        if sudo swapon /tmp/swapfile 2>/dev/null; then
+            echo "   ✅ Existing swap enabled (/tmp/swapfile)"
+        else
+            touch /tmp/.no_swap_support 2>/dev/null || true
+            echo "   ⚠️  Swap activation skipped (container restricted)"
+        fi
+    else
+        echo "   ℹ️  Swap creation deferred in fast prelaunch mode"
+    fi
+elif [ -f /tmp/.no_swap_support ]; then
+    echo "   ⚠️  Swap activation skipped (container restricted)"
+else
+    # Full mode swap creation
     if sudo fallocate -l 2G /tmp/swapfile 2>/dev/null || sudo dd if=/dev/zero of=/tmp/swapfile bs=1M count=2048 status=none 2>/dev/null; then
         sudo chmod 600 /tmp/swapfile 2>/dev/null || true
         sudo mkswap /tmp/swapfile >/dev/null 2>&1 || true
         if sudo swapon /tmp/swapfile 2>/dev/null; then
             echo "   ✅ Swap enabled (2GB at /tmp/swapfile)"
         else
+            touch /tmp/.no_swap_support 2>/dev/null || true
+            rm -f /tmp/swapfile 2>/dev/null || true
             echo "   ⚠️  Swap activation skipped (container restricted)"
         fi
     fi
-else
-    echo "   ✅ Swap already active"
 fi
 
 # 2. Kernel tuning — high-efficiency parameters for virtual workstation
@@ -127,22 +158,28 @@ FREED=0
 # Playwright / Headless caches if present
 for cache_path in "$CACHE_DIR/ms-playwright" "$CACHE_DIR/google-chrome-headless" "$CACHE_DIR/selenium"; do
     if [ -d "$cache_path" ]; then
-        SIZE=$(du -sm "$cache_path" 2>/dev/null | awk '{print $1}')
+        if [[ "$PRELAUNCH" != "true" ]]; then
+            SIZE=$(du -sm "$cache_path" 2>/dev/null | awk '{print $1}')
+            FREED=$((FREED + ${SIZE:-0}))
+        fi
         rm -rf "$cache_path" 2>/dev/null || true
-        FREED=$((FREED + ${SIZE:-0}))
     fi
 done
 
-# npm & pip cache
-command -v npm &>/dev/null && npm cache clean --force >/dev/null 2>&1 && echo "   🗑️  npm cache" || true
-command -v pip &>/dev/null && pip cache purge >/dev/null 2>&1 && echo "   🗑️  pip cache" || true
+# npm & pip cache (only executed during full/manual optimization, skipped on prelaunch)
+if [[ "$PRELAUNCH" != "true" && "$QUICK" != "true" ]]; then
+    command -v npm &>/dev/null && npm cache clean --force >/dev/null 2>&1 && echo "   🗑️  npm cache" || true
+    command -v pip &>/dev/null && pip cache purge >/dev/null 2>&1 && echo "   🗑️  pip cache" || true
+fi
 
 # Chrome disk cache
 if [ -d /tmp/chrome-cache ]; then
-    SIZE=$(du -sm /tmp/chrome-cache 2>/dev/null | awk '{print $1}')
+    if [[ "$PRELAUNCH" != "true" ]]; then
+        SIZE=$(du -sm /tmp/chrome-cache 2>/dev/null | awk '{print $1}')
+        FREED=$((FREED + ${SIZE:-0}))
+        [ "${SIZE:-0}" -gt 0 ] 2>/dev/null && echo "   🗑️  Chrome disk cache: ${SIZE}MB"
+    fi
     rm -rf /tmp/chrome-cache/* 2>/dev/null || true
-    FREED=$((FREED + ${SIZE:-0}))
-    [ "${SIZE:-0}" -gt 0 ] 2>/dev/null && echo "   🗑️  Chrome disk cache: ${SIZE}MB"
 fi
 
 # Chrome profile bloat (non-essential data stores)
@@ -154,9 +191,11 @@ if [ -d "$PROFILE_DIR" ]; then
                PKIMetadata SafetyTips optimization_guide_model_store MEIPreload \
                GraphiteDawnCache SSLErrorAssistant GPUPersistentCache ActorSafetyLists; do
         if [ -d "$PROFILE_DIR/$dir" ]; then
-            SIZE=$(du -sm "$PROFILE_DIR/$dir" 2>/dev/null | awk '{print $1}')
+            if [[ "$PRELAUNCH" != "true" ]]; then
+                SIZE=$(du -sm "$PROFILE_DIR/$dir" 2>/dev/null | awk '{print $1}')
+                FREED=$((FREED + ${SIZE:-0}))
+            fi
             rm -rf "$PROFILE_DIR/$dir" 2>/dev/null || true
-            FREED=$((FREED + ${SIZE:-0}))
         fi
     done
 
@@ -170,13 +209,18 @@ if [ -d "$PROFILE_DIR" ]; then
     echo "   🗑️  Chrome profile bloat cleared"
 fi
 
-# Python bytecode
-if [[ "$QUICK" == "false" ]]; then
+# Python bytecode (skipped in fast prelaunch)
+if [[ "$PRELAUNCH" != "true" && "$QUICK" != "true" ]]; then
     find "$DIR" -name __pycache__ -type d -exec rm -rf {} + 2>/dev/null || true
 fi
 
 # 4. Drop page cache + dentries + inodes
-sudo sh -c 'sync; echo 3 > /proc/sys/vm/drop_caches' 2>/dev/null || true
+if [[ "$PRELAUNCH" == "true" ]]; then
+    # Avoid synchronous disk flush blocking startup
+    sudo sh -c 'echo 3 > /proc/sys/vm/drop_caches' 2>/dev/null || true
+else
+    sudo sh -c 'sync; echo 3 > /proc/sys/vm/drop_caches' 2>/dev/null || true
+fi
 
 # 5. Protect VM infrastructure processes from OOM killer
 for pid in $(pgrep Xvnc 2>/dev/null); do sudo sh -c "echo -800 > /proc/$pid/oom_score_adj" 2>/dev/null || true; done
@@ -192,7 +236,9 @@ for pid in $(pgrep -f 'chrome.*--type=utility' 2>/dev/null); do sudo sh -c "echo
 
 echo ""
 echo "📊 Results:"
-echo "   Disk freed: ~${FREED}MB"
+if [[ "$PRELAUNCH" != "true" ]]; then
+    echo "   Disk freed: ~${FREED}MB"
+fi
 free -h 2>/dev/null | awk 'NR==2{printf "   RAM: %s total, %s used, %s available\n", $2, $3, $7}' || true
 swapon --show 2>/dev/null | tail -1 | awk '{printf "   Swap: %s (used: %s)\n", $3, $4}' || true
 echo ""

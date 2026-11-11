@@ -2,6 +2,7 @@
 set -e
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+export TZ="${TZ:-America/New_York}"
 LOG_DIR="$DIR/logs"
 PROFILE_DIR="$DIR/profile"
 DOWNLOADS_DIR="$DIR/downloads"
@@ -40,7 +41,7 @@ START_URL="${START_URL:-https://www.google.com}"
 if [ -f "$DIR/optimize_vm.sh" ]; then
   echo "Running pre-launch memory optimization..."
   chmod +x "$DIR/optimize_vm.sh"
-  "$DIR/optimize_vm.sh" 2>&1 | sed 's/^/  /' || true
+  "$DIR/optimize_vm.sh" --prelaunch 2>&1 | sed 's/^/  /' || true
 
   # Start background memory watchdog
   setsid "$DIR/optimize_vm.sh" --watch < /dev/null > "$LOG_DIR/watchdog.log" 2>&1 &
@@ -79,12 +80,26 @@ setsid Xvnc $DISPLAY_NUM \
   -CompareFB 2 \
   -AlwaysShared \
   < /dev/null > "$LOG_DIR/xvnc.log" 2>&1 &
-sleep 1
+
+# Wait for TigerVNC socket to become available
+for i in {1..20}; do
+  if [ -S /tmp/vnc.sock ]; then
+    break
+  fi
+  sleep 0.1
+done
 
 # 3. Window Manager (Openbox with full titlebar, dragging & window management)
 echo "[3/6] Starting Openbox window manager..."
 DISPLAY=$DISPLAY_NUM setsid openbox --config-file "$DIR/rc.xml" < /dev/null > "$LOG_DIR/openbox.log" 2>&1 &
-sleep 1
+
+# Brief pause to let Openbox initialize root window
+for i in {1..10}; do
+  if DISPLAY=$DISPLAY_NUM xdpyinfo >/dev/null 2>&1; then
+    break
+  fi
+  sleep 0.1
+done
 
 # 4. Tint2 Desktop Taskbar & App Switcher
 echo "[4/6] Starting Tint2 desktop taskbar..."
@@ -141,11 +156,11 @@ node "$DIR/gateway.js" < /dev/null > "$LOG_DIR/gateway.log" 2>&1 &
 GATEWAY_PID=$!
 
 # Wait for Gateway to bind port 3000
-for i in {1..15}; do
-  if nc -z 127.0.0.1 3000 2>/dev/null || curl -s http://127.0.0.1:3000/ >/dev/null 2>&1; then
+for i in {1..30}; do
+  if nc -z 127.0.0.1 3000 2>/dev/null || curl -s -m 1 http://127.0.0.1:3000/ >/dev/null 2>&1; then
     break
   fi
-  sleep 0.5
+  sleep 0.1
 done
 
 # 9. Direct Cloudflare Tunnel
@@ -156,21 +171,41 @@ setsid cloudflared tunnel --url http://127.0.0.1:3000 < /dev/null > "$LOG_DIR/cl
 # Wait up to 30 seconds for the public tunnel URL to appear
 echo -n "Acquiring public Cloudflare Tunnel URL"
 TUNNEL_URL=""
-for i in {1..30}; do
-  sleep 1
-  echo -n "."
+for i in {1..60}; do
   TUNNEL_URL=$(grep -o "https://[a-zA-Z0-9-]*\.trycloudflare\.com" "$LOG_DIR/cloudflared.log" 2>/dev/null | tail -n 1 || true)
   if [ -n "$TUNNEL_URL" ]; then
-    echo " Done!"
     break
   fi
+  echo -n "."
+  sleep 0.5
 done
+
+TUNNEL_VERIFIED=false
+if [ -n "$TUNNEL_URL" ]; then
+  echo ""
+  echo -n "Verifying Cloudflare Edge DNS and tunnel route reachability"
+  for j in {1..30}; do
+    echo -n "."
+    HTTP_CODE=$(curl -s -k --connect-timeout 2 --max-time 3 -o /dev/null -w "%{http_code}" "$TUNNEL_URL/" 2>/dev/null || echo "000")
+    if [[ "$HTTP_CODE" =~ ^(200|302|401|403)$ ]]; then
+      TUNNEL_VERIFIED=true
+      echo " Verified! (HTTP $HTTP_CODE)"
+      break
+    fi
+    sleep 1
+  done
+  if [ "$TUNNEL_VERIFIED" != "true" ]; then
+    echo " ⚠️ Propagation pending (last HTTP $HTTP_CODE)"
+  fi
+else
+  echo " Failed to acquire URL"
+fi
 
 echo ""
 echo "=========================================================="
 echo "  Ultra Low-Latency Virtual Workstation is RUNNING!"
 echo "  Local Ports: 3000, 6080, 8080"
-if [ -n "$TUNNEL_URL" ]; then
+if [ "$TUNNEL_VERIFIED" = "true" ]; then
   echo "$TUNNEL_URL" > "$DIR/CURRENT_URL.txt"
   echo "Password: $PASSWORD" >> "$DIR/CURRENT_URL.txt"
   echo "$TUNNEL_URL" > "$DIR/VM_LINK.txt"
@@ -183,7 +218,7 @@ if [ -n "$TUNNEL_URL" ]; then
   echo "  (Saved to CURRENT_URL.txt and VM_LINK.txt for quick access)"
 else
   echo ""
-  echo "  ⚠️  Cloudflare Quick Tunnel timed out or is running offline."
+  echo "  ⚠️  Cloudflare Quick Tunnel timed out or failed edge verification."
   echo "  You can access the workstation locally at: http://localhost:6080"
   echo "  Password: $PASSWORD"
 fi
@@ -198,8 +233,7 @@ for pid in $(pgrep openbox 2>/dev/null); do sudo sh -c "echo -500 > /proc/$pid/o
 for pid in $(pgrep tint2 2>/dev/null); do sudo sh -c "echo -500 > /proc/$pid/oom_score_adj" 2>/dev/null || true; done
 for pid in $(pgrep autocutsel 2>/dev/null); do sudo sh -c "echo -500 > /proc/$pid/oom_score_adj" 2>/dev/null || true; done
 
-# Chrome renderers are deprioritized compared to system processes
-sleep 2
+# Chrome renderers are deprioritized compared to system processes (already spawned during tunnel handshake)
 for pid in $(pgrep -f 'chrome.*--type=renderer' 2>/dev/null); do sudo sh -c "echo 300 > /proc/$pid/oom_score_adj" 2>/dev/null || true; done
 for pid in $(pgrep -f 'chrome.*--type=utility' 2>/dev/null); do sudo sh -c "echo 200 > /proc/$pid/oom_score_adj" 2>/dev/null || true; done
 echo "  ✅ Infrastructure protected, Chrome renderers managed"
