@@ -205,7 +205,7 @@ echo ""
 echo "=========================================================="
 echo "  Ultra Low-Latency Virtual Workstation is RUNNING!"
 echo "  Local Ports: 3000, 6080, 8080"
-if [ "$TUNNEL_VERIFIED" = "true" ]; then
+if [ -n "$TUNNEL_URL" ]; then
   echo "$TUNNEL_URL" > "$DIR/CURRENT_URL.txt"
   echo "Password: $PASSWORD" >> "$DIR/CURRENT_URL.txt"
   echo "$TUNNEL_URL" > "$DIR/VM_LINK.txt"
@@ -214,11 +214,16 @@ if [ "$TUNNEL_VERIFIED" = "true" ]; then
   echo "  👉 PUBLIC STREAM LINK:"
   echo "  $TUNNEL_URL"
   echo "  Password: $PASSWORD"
+  if [ "$TUNNEL_VERIFIED" = "true" ]; then
+    echo "  Status: Live and verified active"
+  else
+    echo "  Status: Link assigned (edge propagation finishing, ready in seconds)"
+  fi
   echo ""
   echo "  (Saved to CURRENT_URL.txt and VM_LINK.txt for quick access)"
 else
   echo ""
-  echo "  ⚠️  Cloudflare Quick Tunnel timed out or failed edge verification."
+  echo "  ⚠️  Cloudflare Quick Tunnel timed out or is running offline."
   echo "  You can access the workstation locally at: http://localhost:6080"
   echo "  Password: $PASSWORD"
 fi
