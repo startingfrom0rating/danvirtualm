@@ -168,10 +168,10 @@ echo "Starting direct high-speed Cloudflare Tunnel..."
 rm -f "$LOG_DIR/cloudflared.log"
 setsid cloudflared tunnel --url http://127.0.0.1:3000 < /dev/null > "$LOG_DIR/cloudflared.log" 2>&1 &
 
-# Wait up to 30 seconds for the public tunnel URL to appear
+# Wait up to 60 seconds for the public tunnel URL to appear
 echo -n "Acquiring public Cloudflare Tunnel URL"
 TUNNEL_URL=""
-for i in {1..60}; do
+for i in {1..120}; do
   TUNNEL_URL=$(grep -o "https://[a-zA-Z0-9-]*\.trycloudflare\.com" "$LOG_DIR/cloudflared.log" 2>/dev/null | tail -n 1 || true)
   if [ -n "$TUNNEL_URL" ]; then
     break
@@ -198,7 +198,26 @@ if [ -n "$TUNNEL_URL" ]; then
     echo " ⚠️ Propagation pending (last HTTP $HTTP_CODE)"
   fi
 else
-  echo " Failed to acquire URL"
+  echo " Timed out during initial wait"
+  # Background watcher in case Cloudflare takes longer to allocate
+  (
+    for k in {1..180}; do
+      sleep 1
+      BG_URL=$(grep -o "https://[a-zA-Z0-9-]*\.trycloudflare\.com" "$LOG_DIR/cloudflared.log" 2>/dev/null | tail -n 1 || true)
+      if [ -n "$BG_URL" ]; then
+        echo "$BG_URL" > "$DIR/CURRENT_URL.txt"
+        echo "Password: $PASSWORD" >> "$DIR/CURRENT_URL.txt"
+        echo "$BG_URL" > "$DIR/VM_LINK.txt"
+        echo "Password: $PASSWORD" >> "$DIR/VM_LINK.txt"
+        echo -e "\n\n=========================================================="
+        echo "  👉 PUBLIC STREAM LINK (Acquired in background):"
+        echo "  $BG_URL"
+        echo "  Password: $PASSWORD"
+        echo "=========================================================="
+        break
+      fi
+    done
+  ) &
 fi
 
 echo ""
@@ -223,9 +242,16 @@ if [ -n "$TUNNEL_URL" ]; then
   echo "  (Saved to CURRENT_URL.txt and VM_LINK.txt for quick access)"
 else
   echo ""
-  echo "  ⚠️  Cloudflare Quick Tunnel timed out or is running offline."
-  echo "  You can access the workstation locally at: http://localhost:6080"
-  echo "  Password: $PASSWORD"
+  echo "  ⚠️  Cloudflare Quick Tunnel is still establishing in the background."
+  if [ -n "${CODESPACE_NAME:-}" ] && [ -n "${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN:-}" ]; then
+    echo "  👉 Permanent Codespaces URL (Port 6080):"
+    echo "  https://${CODESPACE_NAME}-6080.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}"
+    echo "  Password: $PASSWORD"
+  else
+    echo "  You can access the workstation locally at: http://localhost:6080"
+    echo "  Password: $PASSWORD"
+  fi
+  echo "  (Run ./get-link.sh in a few seconds once Cloudflare finishes)"
 fi
 echo "=========================================================="
 
